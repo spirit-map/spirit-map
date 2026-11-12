@@ -154,7 +154,7 @@
             stroke-dasharray: 5, 5;
         }
 
-        /* Стили для панели соседей */
+        /* Панель соседей */
         #neighbors-panel {
             position: absolute;
             top: 20px;
@@ -276,6 +276,7 @@
         let companyDisplayNames = {};
         let fitnessClubs = [];
         let radiusCircle = null;
+        let highlightedMarker = null; // Для хранения текущего подсвеченного маркера
         const COLOR_PARTNER = '#333333';
 
         fetch('spirit.csv')
@@ -325,8 +326,9 @@
 
                             marker.companyKey = companyKey;
                             marker.officeName = officeName;
-                            marker.address = address; // Сохраняем адрес для панели
+                            marker.address = address;
                             marker.latLng = L.latLng(lat, lng);
+                            marker.originalIcon = customIcon; // Сохраняем исходную иконку
 
                             if (companyVisibility[companyKey]) {
                                 marker.addTo(map);
@@ -400,6 +402,10 @@
                                             radiusCircle = null;
                                         }
                                         neighborsPanel.classList.remove('visible');
+                                        if (highlightedMarker) {
+                                            highlightedMarker.setIcon(highlightedMarker.originalIcon);
+                                            highlightedMarker = null;
+                                        }
                                         document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
                                         showAllBtn.classList.add('active');
 
@@ -429,6 +435,11 @@
                                             document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
                                             subItem.classList.add('active');
 
+                                            if (highlightedMarker) {
+                                                highlightedMarker.setIcon(highlightedMarker.originalIcon);
+                                                highlightedMarker = null;
+                                            }
+
                                             if (radiusCircle) {
                                                 map.removeLayer(radiusCircle);
                                             }
@@ -440,7 +451,6 @@
 
                                             map.setView(club.latLng, 13);
 
-                                            // Собираем соседей и показываем на карте
                                             let neighbors = [];
                                             Object.keys(allMarkers).forEach(key => {
                                                 allMarkers[key].forEach(m => {
@@ -457,20 +467,64 @@
                                             
                                             club.marker.openPopup();
 
-                                            // Заполняем панель соседей
                                             neighborsTitle.textContent = `Рядом с Spirit.Fitness ${club.name}`;
                                             neighborsList.innerHTML = '';
                                             
                                             if (neighbors.length === 0) {
                                                 neighborsList.innerHTML = '<div class="neighbor-item">В радиусе 2 км нет других компаний.</div>';
                                             } else {
-                                                // Сортируем соседей по названию компании
                                                 neighbors.sort((a, b) => companyDisplayNames[a.companyKey].localeCompare(companyDisplayNames[b.companyKey]));
                                                 
                                                 neighbors.forEach(n => {
                                                     const div = document.createElement('div');
                                                     div.className = 'neighbor-item';
+                                                    div.style.cursor = 'pointer';
+                                                    div.style.transition = 'background-color 0.2s';
+                                                    
                                                     div.innerHTML = `<b>${companyDisplayNames[n.companyKey]}</b><small>${n.address}</small>`;
+                                                    
+                                                    div.addEventListener('click', () => {
+                                                        // 1. Возвращаем предыдущий подсвеченный маркер в исходный вид
+                                                        if (highlightedMarker) {
+                                                            highlightedMarker.setIcon(highlightedMarker.originalIcon);
+                                                        }
+                                                        
+                                                        // 2. Убираем подсветку со всех строк в списке
+                                                        neighborsList.querySelectorAll('.neighbor-item').forEach(el => {
+                                                            el.style.backgroundColor = 'transparent';
+                                                            el.style.color = '';
+                                                        });
+
+                                                        // 3. Центрируем и открываем попап
+                                                        map.setView(n.latLng, 15);
+                                                        n.openPopup();
+                                                        
+                                                        // 4. Подсвечиваем новый маркер (желтый)
+                                                        const yellowIcon = L.divIcon({
+                                                            className: 'marker-custom',
+                                                            html: `<div style="background-color: #FFD700; width: 20px; height: 20px; border-radius: 50%; border: 3px solid #333; box-shadow: 0 0 8px rgba(0,0,0,0.8);"></div>`,
+                                                            iconSize: [24, 24],
+                                                            iconAnchor: [12, 12]
+                                                        });
+                                                        n.setIcon(yellowIcon);
+                                                        highlightedMarker = n;
+
+                                                        // 5. Визуально выделяем строку в списке
+                                                        div.style.backgroundColor = '#fff9c4';
+                                                        div.style.color = '#333';
+                                                    });
+
+                                                    div.addEventListener('mouseenter', () => {
+                                                        if (div.style.backgroundColor !== 'rgb(255, 249, 196)') {
+                                                            div.style.backgroundColor = '#f5f5f5';
+                                                        }
+                                                    });
+                                                    div.addEventListener('mouseleave', () => {
+                                                        if (div.style.backgroundColor !== 'rgb(255, 249, 196)') {
+                                                            div.style.backgroundColor = 'transparent';
+                                                        }
+                                                    });
+                                                    
                                                     neighborsList.appendChild(div);
                                                 });
                                             }
@@ -491,6 +545,10 @@
                                         map.removeLayer(radiusCircle);
                                         radiusCircle = null;
                                         neighborsPanel.classList.remove('visible');
+                                        if (highlightedMarker) {
+                                            highlightedMarker.setIcon(highlightedMarker.originalIcon);
+                                            highlightedMarker = null;
+                                        }
                                         document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
                                         Object.keys(allMarkers).forEach(key => {
                                             if (companyVisibility[key]) {
@@ -569,6 +627,10 @@
                                 radiusCircle = null;
                             }
                             neighborsPanel.classList.remove('visible');
+                            if (highlightedMarker) {
+                                highlightedMarker.setIcon(highlightedMarker.originalIcon);
+                                highlightedMarker = null;
+                            }
                             document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
 
                             Object.keys(allMarkers).forEach(key => {
