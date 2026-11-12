@@ -329,6 +329,36 @@
                                     subContainer.id = 'fitness-sub-list';
                                     subContainer.style.background = '#fff';
                                     
+                                    // Кнопка "Показать все клубы на карте"
+                                    const showAllBtn = document.createElement('div');
+                                    showAllBtn.className = 'company-item fitness-subitem';
+                                    showAllBtn.style.fontWeight = 'bold';
+                                    showAllBtn.style.color = '#ff6600';
+                                    showAllBtn.innerHTML = `<span class="company-name"><i class="fas fa-map-marker-alt"></i> Показать все клубы на карте</span>`;
+                                    
+                                    showAllBtn.addEventListener('click', (ev) => {
+                                        ev.stopPropagation();
+                                        if (radiusCircle) {
+                                            map.removeLayer(radiusCircle);
+                                            radiusCircle = null;
+                                        }
+                                        document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
+                                        showAllBtn.classList.add('active');
+
+                                        Object.keys(allMarkers).forEach(key => {
+                                            if (key === 'spirit.fitness') {
+                                                allMarkers[key].forEach(m => m.addTo(map));
+                                            } else {
+                                                allMarkers[key].forEach(m => map.removeLayer(m));
+                                            }
+                                        });
+
+                                        const group = L.featureGroup(allMarkers['spirit.fitness']);
+                                        map.fitBounds(group.getBounds().pad(0.1));
+                                    });
+                                    subContainer.appendChild(showAllBtn);
+
+                                    // Список клубов
                                     fitnessClubs.sort((a, b) => a.name.localeCompare(b.name));
 
                                     fitnessClubs.forEach(club => {
@@ -374,17 +404,20 @@
                             } else {
                                 item.addEventListener('click', (e) => {
                                     if (e.target.closest('.delete-btn')) return;
-                                    const isCurrentlyVisible = companyVisibility[companyKey];
-                                    companyVisibility[companyKey] = !isCurrentlyVisible;
-
+                                    
                                     if (radiusCircle) {
                                         map.removeLayer(radiusCircle);
                                         radiusCircle = null;
                                         document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
                                         Object.keys(allMarkers).forEach(key => {
-                                            allMarkers[key].forEach(m => m.addTo(map));
+                                            if (companyVisibility[key]) {
+                                                allMarkers[key].forEach(m => m.addTo(map));
+                                            }
                                         });
                                     }
+
+                                    const isCurrentlyVisible = companyVisibility[companyKey];
+                                    companyVisibility[companyKey] = !isCurrentlyVisible;
 
                                     if (companyVisibility[companyKey]) {
                                         item.classList.add('active');
@@ -414,7 +447,6 @@
                             const query = e.target.value.toLowerCase().trim();
                             
                             if (!query) {
-                                // Если поиск пуст, показываем все компании
                                 Object.keys(allMarkers).forEach(key => {
                                     allMarkers[key].forEach(m => m.addTo(map));
                                 });
@@ -447,23 +479,19 @@
 
                         // --- КНОПКА "СБРОСИТЬ" ---
                         document.getElementById('reset-filter').addEventListener('click', () => {
-                            // Очищаем поиск
                             document.getElementById('search-input').value = '';
                             
-                            // Убираем круг радиуса
                             if (radiusCircle) {
                                 map.removeLayer(radiusCircle);
                                 radiusCircle = null;
                             }
                             document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
 
-                            // Возвращаем все маркеры на карту
                             Object.keys(allMarkers).forEach(key => {
                                 companyVisibility[key] = true;
                                 allMarkers[key].forEach(m => m.addTo(map));
                             });
 
-                            // Сбрасываем зум
                             map.setView([55.751244, 37.618423], 10);
                         });
 
@@ -475,7 +503,6 @@
                         // Кнопка "Снять все"
                         document.getElementById('deselect-all').addEventListener('click', () => {
                             document.getElementById('reset-filter').click();
-                            // После сброса скрываем все маркеры
                             Object.keys(allMarkers).forEach(key => {
                                 companyVisibility[key] = false;
                                 const item = document.querySelector(`.company-item[data-company="${key}"]`);
