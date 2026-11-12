@@ -120,6 +120,21 @@
             border: 2px solid white;
             box-shadow: 0 0 4px rgba(0,0,0,0.5);
         }
+
+        /* Стили для выпадающего списка */
+        .fitness-subitem {
+            padding-left: 40px;
+            font-size: 13px;
+            background-color: #fafafa;
+        }
+        .fitness-subitem:hover { background-color: #f0f0f0; }
+        .fitness-subitem.active { background-color: #e6f2ff; border-left: 4px solid #3498db; }
+        .radius-circle {
+            stroke: #3498db;
+            fill: #3498db;
+            fill-opacity: 0.1;
+            stroke-dasharray: 5, 5;
+        }
     </style>
 </head>
 <body>
@@ -155,7 +170,6 @@
         const map = L.map('map', { zoomControl: false }).setView([55.751244, 37.618423], 10);
         L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-        // ИСПРАВЛЕНО: убрал {s} и поставил https, чтобы подложка грузилась на GitHub Pages
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -179,7 +193,9 @@
 
         let allMarkers = {};
         let companyVisibility = {};
-        let companyDisplayNames = {}; // Для хранения красивого написания
+        let companyDisplayNames = {};
+        let fitnessClubs = [];
+        let radiusCircle = null;
         const COLOR_PARTNER = '#333333';
 
         fetch('spirit.csv')
@@ -197,24 +213,18 @@
                             const lettersOnly = company.match(/[a-zA-Zа-яА-Я]/g) || [];
                             if (company.length < 2 || lettersOnly.length < 2) return;
 
-                            // КЛЮЧ ДЛЯ ОБЪЕДИНЕНИЯ: всё в нижнем регистре
                             const companyKey = company.toLowerCase();
-
-                            // Запоминаем самое красивое написание (с заглавными буквами)
-                            if (!companyDisplayNames[companyKey]) {
-                                companyDisplayNames[companyKey] = company;
-                            } else if (company[0] === company[0].toUpperCase() && companyDisplayNames[companyKey][0] !== companyDisplayNames[companyKey][0].toUpperCase()) {
-                                // Если текущее написание начинается с большой буквы, а старое - с маленькой, заменяем
-                                companyDisplayNames[companyKey] = company;
-                            }
-
-                            const name = (row[1] && String(row[1]).trim()) ? String(row[1]).trim() : 'Офис';
+                            const officeName = (row[1] && String(row[1]).trim()) ? String(row[1]).trim() : 'Офис';
                             const address = (row[2] && String(row[2]).trim()) ? String(row[2]).trim() : '';
                             const lat = parseFloat(row[3]);
                             const lng = parseFloat(row[4]);
                             const color = (row[5] && String(row[5]).trim()) ? String(row[5]).trim() : COLOR_PARTNER;
 
                             if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return;
+
+                            if (!companyDisplayNames[companyKey]) {
+                                companyDisplayNames[companyKey] = company;
+                            }
 
                             if (!companiesMap.has(companyKey)) {
                                 companiesMap.set(companyKey, 0);
@@ -230,26 +240,36 @@
                                 iconAnchor: [9, 9]
                             });
 
-                            // В попапе показываем красивое название
                             const marker = L.marker([lat, lng], { icon: customIcon })
-                                .bindPopup(`<b>${companyDisplayNames[companyKey]}</b><br>${name}<br><small>${address}</small>`);
+                                .bindPopup(`<b>${companyDisplayNames[companyKey]}</b><br>${officeName}<br><small>${address}</small>`);
+
+                            // Сохраняем данные для поиска
+                            marker.companyKey = companyKey;
+                            marker.officeName = officeName;
+                            marker.latLng = L.latLng(lat, lng);
 
                             if (companyVisibility[companyKey]) {
                                 marker.addTo(map);
                             }
                             allMarkers[companyKey].push(marker);
+
+                            // Если это Spirit.Fitness, сохраняем клуб для выпадающего списка
+                            if (companyKey === 'spirit.fitness') {
+                                fitnessClubs.push({
+                                    name: officeName,
+                                    latLng: marker.latLng,
+                                    marker: marker
+                                });
+                            }
                         });
 
                         document.getElementById('total-companies').textContent = `Всего компаний: ${companiesMap.size}`;
 
-                        // Сортировка по красивому названию
                         const sortedKeys = Array.from(companiesMap.keys()).sort((a, b) => {
                             const nameA = companyDisplayNames[a];
                             const nameB = companyDisplayNames[b];
-                            
                             const aIsSpirit = nameA.toLowerCase().includes('spirit');
                             const bIsSpirit = nameB.toLowerCase().includes('spirit');
-                            
                             if (aIsSpirit && !bIsSpirit) return -1;
                             if (!aIsSpirit && bIsSpirit) return 1;
                             return nameA.localeCompare(nameB);
@@ -263,7 +283,7 @@
                             
                             const item = document.createElement('div');
                             item.className = 'company-item active';
-                            item.dataset.company = companyKey; // Используем ключ в нижнем регистре
+                            item.dataset.company = companyKey;
 
                             item.innerHTML = `
                                 <div class="company-info">
@@ -273,20 +293,102 @@
                                 <button class="delete-btn" title="Удалить с карты"><i class="fas fa-trash"></i></button>
                             `;
 
-                            item.addEventListener('click', (e) => {
-                                if (e.target.closest('.delete-btn')) return;
+                            // Логика для раскрытия списка Spirit.Fitness
+                            if (companyKey === 'spirit.fitness') {
+                                item.style.cursor = 'pointer';
+                                item.addEventListener('click', (e) => {
+                                    if (e.target.closest('.delete-btn')) return;
+                                    
+                                    // Проверяем, открыт ли уже список
+                                    let subContainer = document.getElementById('fitness-sub-list');
+                                    if (subContainer) {
+                                        subContainer.remove();
+                                        return;
+                                    }
 
-                                const isCurrentlyVisible = companyVisibility[companyKey];
-                                companyVisibility[companyKey] = !isCurrentlyVisible;
+                                    // Создаем контейнер для подсписка
+                                    subContainer = document.createElement('div');
+                                    subContainer.id = 'fitness-sub-list';
+                                    subContainer.style.background = '#fff';
+                                    
+                                    // Сортируем клубы по названию
+                                    fitnessClubs.sort((a, b) => a.name.localeCompare(b.name));
 
-                                if (companyVisibility[companyKey]) {
-                                    item.classList.add('active');
-                                    allMarkers[companyKey].forEach(m => m.addTo(map));
-                                } else {
-                                    item.classList.remove('active');
-                                    allMarkers[companyKey].forEach(m => map.removeLayer(m));
-                                }
-                            });
+                                    fitnessClubs.forEach(club => {
+                                        const subItem = document.createElement('div');
+                                        subItem.className = 'company-item fitness-subitem';
+                                        subItem.innerHTML = `<span class="company-name">${club.name}</span>`;
+                                        
+                                        subItem.addEventListener('click', (ev) => {
+                                            ev.stopPropagation(); // Чтобы не закрывался родительский список
+                                            
+                                            // Снимаем выделение с других подэлементов
+                                            document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
+                                            subItem.classList.add('active');
+
+                                            // Удаляем старый круг, если есть
+                                            if (radiusCircle) {
+                                                map.removeLayer(radiusCircle);
+                                            }
+
+                                            // Рисуем круг радиусом 2 км (2000 метров)
+                                            radiusCircle = L.circle(club.latLng, {
+                                                radius: 2000,
+                                                className: 'radius-circle'
+                                            }).addTo(map);
+
+                                            // Центрируем карту на клубе
+                                            map.setView(club.latLng, 13);
+
+                                            // Логика подсветки: скрываем все маркеры, кроме тех, что в радиусе
+                                            Object.keys(allMarkers).forEach(key => {
+                                                allMarkers[key].forEach(m => {
+                                                    if (m.latLng.distanceTo(club.latLng) <= 2000) {
+                                                        m.addTo(map); // Показываем, если в радиусе
+                                                    } else {
+                                                        map.removeLayer(m); // Скрываем, если далеко
+                                                    }
+                                                });
+                                            });
+                                            
+                                            // Открываем попап у клуба
+                                            club.marker.openPopup();
+                                        });
+                                        
+                                        subContainer.appendChild(subItem);
+                                    });
+
+                                    // Вставляем подсписок после элемента Spirit.Fitness
+                                    item.parentNode.insertBefore(subContainer, item.nextSibling);
+                                });
+                            } else {
+                                // Стандартная логика для остальных компаний
+                                item.addEventListener('click', (e) => {
+                                    if (e.target.closest('.delete-btn')) return;
+                                    const isCurrentlyVisible = companyVisibility[companyKey];
+                                    companyVisibility[companyKey] = !isCurrentlyVisible;
+
+                                    // Если мы взаимодействуем с другой компанией, сбрасываем радиус
+                                    if (radiusCircle) {
+                                        map.removeLayer(radiusCircle);
+                                        radiusCircle = null;
+                                        document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
+                                        // Восстанавливаем видимость всех компаний
+                                        Object.keys(allMarkers).forEach(key => {
+                                            allMarkers[key].forEach(m => m.addTo(map));
+                                        });
+                                        companyVisibility[companyKey] = true; // Сбрасываем в true, чтобы не было багов
+                                    }
+
+                                    if (companyVisibility[companyKey]) {
+                                        item.classList.add('active');
+                                        allMarkers[companyKey].forEach(m => m.addTo(map));
+                                    } else {
+                                        item.classList.remove('active');
+                                        allMarkers[companyKey].forEach(m => map.removeLayer(m));
+                                    }
+                                });
+                            }
 
                             const deleteBtn = item.querySelector('.delete-btn');
                             deleteBtn.addEventListener('click', (e) => {
@@ -302,20 +404,26 @@
                         });
 
                         document.getElementById('select-all').addEventListener('click', () => {
+                            if (radiusCircle) map.removeLayer(radiusCircle);
                             document.querySelectorAll('.company-item').forEach(item => {
                                 const companyKey = item.dataset.company;
-                                companyVisibility[companyKey] = true;
-                                item.classList.add('active');
-                                allMarkers[companyKey].forEach(m => m.addTo(map));
+                                if(companyKey) {
+                                    companyVisibility[companyKey] = true;
+                                    item.classList.add('active');
+                                    if(allMarkers[companyKey]) allMarkers[companyKey].forEach(m => m.addTo(map));
+                                }
                             });
                         });
 
                         document.getElementById('deselect-all').addEventListener('click', () => {
+                            if (radiusCircle) map.removeLayer(radiusCircle);
                             document.querySelectorAll('.company-item').forEach(item => {
                                 const companyKey = item.dataset.company;
-                                companyVisibility[companyKey] = false;
-                                item.classList.remove('active');
-                                allMarkers[companyKey].forEach(m => map.removeLayer(m));
+                                if(companyKey) {
+                                    companyVisibility[companyKey] = false;
+                                    item.classList.remove('active');
+                                    if(allMarkers[companyKey]) allMarkers[companyKey].forEach(m => map.removeLayer(m));
+                                }
                             });
                         });
 
