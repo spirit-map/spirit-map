@@ -40,50 +40,42 @@
             margin-bottom: 10px;
         }
 
-        /* Стили для поиска и кнопки сброса */
-        .search-container {
+        .search-box {
+            margin-bottom: 10px;
+        }
+        .search-box input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .controls {
             display: flex;
             gap: 5px;
             margin-bottom: 10px;
         }
-        .search-container input {
-            flex-grow: 1;
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 13px;
-        }
-        .btn-reset {
-            padding: 8px 12px;
-            background: #f0f0f0;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 13px;
-            color: #333;
-            transition: background 0.2s;
-            display: none; /* Скрыта по умолчанию */
-        }
-        .btn-reset:hover { background: #e0e0e0; }
-        .btn-reset.visible { display: block; }
-
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
         .btn-control {
             flex: 1;
-            padding: 8px;
-            font-size: 12px;
+            padding: 8px 5px;
+            font-size: 11px;
             cursor: pointer;
             border: 1px solid #ddd;
             background: #f9f9f9;
             border-radius: 4px;
             transition: background 0.2s;
             color: #333;
+            white-space: nowrap;
         }
         .btn-control:hover { background: #eee; }
+        .btn-reset-filter {
+            background: #fff3e0;
+            border-color: #ffcc80;
+            color: #e65100;
+            font-weight: 600;
+        }
+        .btn-reset-filter:hover { background: #ffe0b2; }
 
         .company-list {
             flex-grow: 1; overflow-y: auto; padding: 10px 0;
@@ -175,15 +167,14 @@
             
             <div class="total-stats" id="total-companies">Всего компаний: ...</div>
 
-            <!-- Поиск и кнопка сброса -->
-            <div class="search-container">
+            <div class="search-box">
                 <input type="text" id="search-input" placeholder="Поиск по названию, улице или метро...">
-                <button id="reset-btn" class="btn-reset" title="Сбросить фильтр"><i class="fas fa-times"></i></button>
             </div>
 
             <div class="controls">
                 <button class="btn-control" id="select-all">Выбрать все</button>
                 <button class="btn-control" id="deselect-all">Снять все</button>
+                <button class="btn-control btn-reset-filter" id="reset-filter">Сбросить</button>
             </div>
         </div>
         <div class="company-list" id="company-list">
@@ -210,7 +201,6 @@
         const sidebar = document.getElementById('sidebar');
         const toggleBtn = document.getElementById('toggle-btn');
         const toggleIcon = document.getElementById('toggle-icon');
-        const resetBtn = document.getElementById('reset-btn');
 
         toggleBtn.addEventListener('click', () => {
             sidebar.classList.toggle('hidden');
@@ -351,7 +341,6 @@
                                             
                                             document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
                                             subItem.classList.add('active');
-                                            resetBtn.classList.add('visible'); // Показываем кнопку сброса
 
                                             if (radiusCircle) {
                                                 map.removeLayer(radiusCircle);
@@ -392,7 +381,6 @@
                                         map.removeLayer(radiusCircle);
                                         radiusCircle = null;
                                         document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
-                                        resetBtn.classList.remove('visible');
                                         Object.keys(allMarkers).forEach(key => {
                                             allMarkers[key].forEach(m => m.addTo(map));
                                         });
@@ -426,8 +414,7 @@
                             const query = e.target.value.toLowerCase().trim();
                             
                             if (!query) {
-                                // Если поиск пуст, показываем все компании и скрываем кнопку сброса
-                                resetBtn.classList.remove('visible');
+                                // Если поиск пуст, показываем все компании
                                 Object.keys(allMarkers).forEach(key => {
                                     allMarkers[key].forEach(m => m.addTo(map));
                                 });
@@ -435,15 +422,15 @@
                                 return;
                             }
 
-                            // Показываем кнопку сброса
-                            resetBtn.classList.add('visible');
-
                             let foundMarkers = [];
                             
                             Object.keys(allMarkers).forEach(key => {
                                 allMarkers[key].forEach(marker => {
+                                    const companyName = companyDisplayNames[marker.companyKey].toLowerCase();
+                                    const officeName = marker.officeName.toLowerCase();
                                     const popupContent = marker.getPopup().getContent().toLowerCase();
-                                    if (popupContent.includes(query)) {
+                                    
+                                    if (companyName.includes(query) || officeName.includes(query) || popupContent.includes(query)) {
                                         marker.addTo(map);
                                         foundMarkers.push(marker);
                                     } else {
@@ -458,8 +445,8 @@
                             }
                         });
 
-                        // --- ЛОГИКА СБРОСА ФИЛЬТРА ---
-                        resetBtn.addEventListener('click', () => {
+                        // --- КНОПКА "СБРОСИТЬ" ---
+                        document.getElementById('reset-filter').addEventListener('click', () => {
                             // Очищаем поиск
                             document.getElementById('search-input').value = '';
                             
@@ -478,18 +465,23 @@
 
                             // Сбрасываем зум
                             map.setView([55.751244, 37.618423], 10);
-                            
-                            // Скрываем кнопку сброса
-                            resetBtn.classList.remove('visible');
                         });
 
-                        // Кнопки "Выбрать все" и "Снять все" тоже сбрасывают фильтр
+                        // Кнопка "Выбрать все"
                         document.getElementById('select-all').addEventListener('click', () => {
-                            resetBtn.click(); // Просто вызываем сброс
+                            document.getElementById('reset-filter').click();
                         });
 
+                        // Кнопка "Снять все"
                         document.getElementById('deselect-all').addEventListener('click', () => {
-                            resetBtn.click(); // Просто вызываем сброс
+                            document.getElementById('reset-filter').click();
+                            // После сброса скрываем все маркеры
+                            Object.keys(allMarkers).forEach(key => {
+                                companyVisibility[key] = false;
+                                const item = document.querySelector(`.company-item[data-company="${key}"]`);
+                                if (item) item.classList.remove('active');
+                                allMarkers[key].forEach(m => map.removeLayer(m));
+                            });
                         });
 
                     }
