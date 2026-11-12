@@ -37,8 +37,35 @@
             font-size: 13px;
             font-weight: 600;
             color: #ff6600;
-            margin-bottom: 15px;
+            margin-bottom: 10px;
         }
+
+        /* Стили для поиска и кнопки сброса */
+        .search-container {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .search-container input {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .btn-reset {
+            padding: 8px 12px;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #333;
+            transition: background 0.2s;
+            display: none; /* Скрыта по умолчанию */
+        }
+        .btn-reset:hover { background: #e0e0e0; }
+        .btn-reset.visible { display: block; }
 
         .controls {
             display: flex;
@@ -121,7 +148,6 @@
             box-shadow: 0 0 4px rgba(0,0,0,0.5);
         }
 
-        /* Стили для выпадающего списка */
         .fitness-subitem {
             padding-left: 40px;
             font-size: 13px;
@@ -148,6 +174,12 @@
             <p>Нажимайте на компании, чтобы включить или выключить их отображение</p>
             
             <div class="total-stats" id="total-companies">Всего компаний: ...</div>
+
+            <!-- Поиск и кнопка сброса -->
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Поиск по названию, улице или метро...">
+                <button id="reset-btn" class="btn-reset" title="Сбросить фильтр"><i class="fas fa-times"></i></button>
+            </div>
 
             <div class="controls">
                 <button class="btn-control" id="select-all">Выбрать все</button>
@@ -178,6 +210,7 @@
         const sidebar = document.getElementById('sidebar');
         const toggleBtn = document.getElementById('toggle-btn');
         const toggleIcon = document.getElementById('toggle-icon');
+        const resetBtn = document.getElementById('reset-btn');
 
         toggleBtn.addEventListener('click', () => {
             sidebar.classList.toggle('hidden');
@@ -243,7 +276,6 @@
                             const marker = L.marker([lat, lng], { icon: customIcon })
                                 .bindPopup(`<b>${companyDisplayNames[companyKey]}</b><br>${officeName}<br><small>${address}</small>`);
 
-                            // Сохраняем данные для поиска
                             marker.companyKey = companyKey;
                             marker.officeName = officeName;
                             marker.latLng = L.latLng(lat, lng);
@@ -253,7 +285,6 @@
                             }
                             allMarkers[companyKey].push(marker);
 
-                            // Если это Spirit.Fitness, сохраняем клуб для выпадающего списка
                             if (companyKey === 'spirit.fitness') {
                                 fitnessClubs.push({
                                     name: officeName,
@@ -293,25 +324,21 @@
                                 <button class="delete-btn" title="Удалить с карты"><i class="fas fa-trash"></i></button>
                             `;
 
-                            // Логика для раскрытия списка Spirit.Fitness
                             if (companyKey === 'spirit.fitness') {
                                 item.style.cursor = 'pointer';
                                 item.addEventListener('click', (e) => {
                                     if (e.target.closest('.delete-btn')) return;
                                     
-                                    // Проверяем, открыт ли уже список
                                     let subContainer = document.getElementById('fitness-sub-list');
                                     if (subContainer) {
                                         subContainer.remove();
                                         return;
                                     }
 
-                                    // Создаем контейнер для подсписка
                                     subContainer = document.createElement('div');
                                     subContainer.id = 'fitness-sub-list';
                                     subContainer.style.background = '#fff';
                                     
-                                    // Сортируем клубы по названию
                                     fitnessClubs.sort((a, b) => a.name.localeCompare(b.name));
 
                                     fitnessClubs.forEach(club => {
@@ -320,64 +347,55 @@
                                         subItem.innerHTML = `<span class="company-name">${club.name}</span>`;
                                         
                                         subItem.addEventListener('click', (ev) => {
-                                            ev.stopPropagation(); // Чтобы не закрывался родительский список
+                                            ev.stopPropagation();
                                             
-                                            // Снимаем выделение с других подэлементов
                                             document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
                                             subItem.classList.add('active');
+                                            resetBtn.classList.add('visible'); // Показываем кнопку сброса
 
-                                            // Удаляем старый круг, если есть
                                             if (radiusCircle) {
                                                 map.removeLayer(radiusCircle);
                                             }
 
-                                            // Рисуем круг радиусом 2 км (2000 метров)
                                             radiusCircle = L.circle(club.latLng, {
                                                 radius: 2000,
                                                 className: 'radius-circle'
                                             }).addTo(map);
 
-                                            // Центрируем карту на клубе
                                             map.setView(club.latLng, 13);
 
-                                            // Логика подсветки: скрываем все маркеры, кроме тех, что в радиусе
                                             Object.keys(allMarkers).forEach(key => {
                                                 allMarkers[key].forEach(m => {
                                                     if (m.latLng.distanceTo(club.latLng) <= 2000) {
-                                                        m.addTo(map); // Показываем, если в радиусе
+                                                        m.addTo(map);
                                                     } else {
-                                                        map.removeLayer(m); // Скрываем, если далеко
+                                                        map.removeLayer(m);
                                                     }
                                                 });
                                             });
                                             
-                                            // Открываем попап у клуба
                                             club.marker.openPopup();
                                         });
                                         
                                         subContainer.appendChild(subItem);
                                     });
 
-                                    // Вставляем подсписок после элемента Spirit.Fitness
                                     item.parentNode.insertBefore(subContainer, item.nextSibling);
                                 });
                             } else {
-                                // Стандартная логика для остальных компаний
                                 item.addEventListener('click', (e) => {
                                     if (e.target.closest('.delete-btn')) return;
                                     const isCurrentlyVisible = companyVisibility[companyKey];
                                     companyVisibility[companyKey] = !isCurrentlyVisible;
 
-                                    // Если мы взаимодействуем с другой компанией, сбрасываем радиус
                                     if (radiusCircle) {
                                         map.removeLayer(radiusCircle);
                                         radiusCircle = null;
                                         document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
-                                        // Восстанавливаем видимость всех компаний
+                                        resetBtn.classList.remove('visible');
                                         Object.keys(allMarkers).forEach(key => {
                                             allMarkers[key].forEach(m => m.addTo(map));
                                         });
-                                        companyVisibility[companyKey] = true; // Сбрасываем в true, чтобы не было багов
                                     }
 
                                     if (companyVisibility[companyKey]) {
@@ -403,28 +421,75 @@
                             companyListDiv.appendChild(item);
                         });
 
-                        document.getElementById('select-all').addEventListener('click', () => {
-                            if (radiusCircle) map.removeLayer(radiusCircle);
-                            document.querySelectorAll('.company-item').forEach(item => {
-                                const companyKey = item.dataset.company;
-                                if(companyKey) {
-                                    companyVisibility[companyKey] = true;
-                                    item.classList.add('active');
-                                    if(allMarkers[companyKey]) allMarkers[companyKey].forEach(m => m.addTo(map));
-                                }
+                        // --- ЛОГИКА ПОИСКА ---
+                        document.getElementById('search-input').addEventListener('input', function(e) {
+                            const query = e.target.value.toLowerCase().trim();
+                            
+                            if (!query) {
+                                // Если поиск пуст, показываем все компании и скрываем кнопку сброса
+                                resetBtn.classList.remove('visible');
+                                Object.keys(allMarkers).forEach(key => {
+                                    allMarkers[key].forEach(m => m.addTo(map));
+                                });
+                                map.setView([55.751244, 37.618423], 10);
+                                return;
+                            }
+
+                            // Показываем кнопку сброса
+                            resetBtn.classList.add('visible');
+
+                            let foundMarkers = [];
+                            
+                            Object.keys(allMarkers).forEach(key => {
+                                allMarkers[key].forEach(marker => {
+                                    const popupContent = marker.getPopup().getContent().toLowerCase();
+                                    if (popupContent.includes(query)) {
+                                        marker.addTo(map);
+                                        foundMarkers.push(marker);
+                                    } else {
+                                        map.removeLayer(marker);
+                                    }
+                                });
                             });
+
+                            if (foundMarkers.length > 0) {
+                                const group = L.featureGroup(foundMarkers);
+                                map.fitBounds(group.getBounds().pad(0.1));
+                            }
+                        });
+
+                        // --- ЛОГИКА СБРОСА ФИЛЬТРА ---
+                        resetBtn.addEventListener('click', () => {
+                            // Очищаем поиск
+                            document.getElementById('search-input').value = '';
+                            
+                            // Убираем круг радиуса
+                            if (radiusCircle) {
+                                map.removeLayer(radiusCircle);
+                                radiusCircle = null;
+                            }
+                            document.querySelectorAll('.fitness-subitem').forEach(el => el.classList.remove('active'));
+
+                            // Возвращаем все маркеры на карту
+                            Object.keys(allMarkers).forEach(key => {
+                                companyVisibility[key] = true;
+                                allMarkers[key].forEach(m => m.addTo(map));
+                            });
+
+                            // Сбрасываем зум
+                            map.setView([55.751244, 37.618423], 10);
+                            
+                            // Скрываем кнопку сброса
+                            resetBtn.classList.remove('visible');
+                        });
+
+                        // Кнопки "Выбрать все" и "Снять все" тоже сбрасывают фильтр
+                        document.getElementById('select-all').addEventListener('click', () => {
+                            resetBtn.click(); // Просто вызываем сброс
                         });
 
                         document.getElementById('deselect-all').addEventListener('click', () => {
-                            if (radiusCircle) map.removeLayer(radiusCircle);
-                            document.querySelectorAll('.company-item').forEach(item => {
-                                const companyKey = item.dataset.company;
-                                if(companyKey) {
-                                    companyVisibility[companyKey] = false;
-                                    item.classList.remove('active');
-                                    if(allMarkers[companyKey]) allMarkers[companyKey].forEach(m => map.removeLayer(m));
-                                }
-                            });
+                            resetBtn.click(); // Просто вызываем сброс
                         });
 
                     }
